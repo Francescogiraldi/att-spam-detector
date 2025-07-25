@@ -15,6 +15,13 @@ import pickle
 
 # Vérification des dépendances optionnelles
 try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+
+try:
     import torch
     from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
     TORCH_AVAILABLE = True
@@ -80,91 +87,122 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def clean_text(text):
+    """Clean and preprocess text"""
+    import string
+    # Convert to lowercase
+    text = text.lower()
+    # Remove punctuation
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 class SpamDetector:
     def __init__(self):
-        self.tokenizer_basic = None
-        self.model_basic = None
-        self.tokenizer_bert = None
-        self.model_bert = None
-        self.max_words = 5000
-        self.max_len = 50
+        self.sklearn_model = None
+        self.tfidf_vectorizer = None
+        self.bert_model = None
+        self.bert_tokenizer = None
+        self.models_loaded = False
+        
         if TORCH_AVAILABLE:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = None
-        
-    def clean_text(self, text):
-        """Nettoie le texte pour le modèle de base"""
-        text = text.lower()
-        text = re.sub(r"[^a-z0-9\s]", "", text)
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
     
-    def load_basic_model(self):
-        """Charge le modèle de base (simulation)"""
-        # En production, vous chargeriez le modèle sauvegardé
-        # self.model_basic = load_model('basic_model.h5')
-        # with open('tokenizer.pkl', 'rb') as f:
-        #     self.tokenizer_basic = pickle.load(f)
-        pass
-    
-    def load_bert_model(self):
-        """Charge le modèle BERT (simulation)"""
-        if not TORCH_AVAILABLE:
-            return False
+    def load_data(self):
+        """Load the SMS spam dataset"""
         try:
-            self.tokenizer_bert = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
-            # En production, vous chargeriez le modèle fine-tuné
-            # self.model_bert = DistilBertForSequenceClassification.from_pretrained('./saved_bert_model')
-            return True
+            df = pd.read_csv('spam.csv', encoding='latin-1')
+            df = df.iloc[:, :2]
+            df.columns = ['label', 'message']
+            df['label'] = df['label'].map({'ham': 0, 'spam': 1})
+            return df
         except Exception as e:
-            st.error(f"Erreur lors du chargement du modèle BERT: {e}")
-            return False
+            st.error(f"Erreur lors du chargement des données: {e}")
+            return None
     
-    def predict_basic(self, text):
-        """Prédiction avec le modèle de base (simulation)"""
-        # Simulation d'une prédiction
-        spam_keywords = ['free', 'win', 'prize', 'call', 'urgent', 'limited', 'offer', 'cash', 'money']
-        text_lower = text.lower()
-        spam_score = sum(1 for keyword in spam_keywords if keyword in text_lower)
-        probability = min(spam_score * 0.15 + np.random.random() * 0.3, 1.0)
-        prediction = 1 if probability > 0.5 else 0
+    def load_models(self):
+        """Load trained models"""
+        import os
+        
+        if not os.path.exists('models'):
+            st.warning("Le dossier 'models' n'existe pas. Exécutez d'abord train_models.py")
+            return False
+        
+        # Load scikit-learn model
+        try:
+            with open('models/sklearn_model.pkl', 'rb') as f:
+                self.sklearn_model = pickle.load(f)
+            with open('models/tfidf_vectorizer.pkl', 'rb') as f:
+                self.tfidf_vectorizer = pickle.load(f)
+            st.success("✅ Modèle scikit-learn chargé avec succès")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement du modèle scikit-learn: {e}")
+            return False
+        
+        # Load DistilBERT model if available
+        if TORCH_AVAILABLE:
+            try:
+                if os.path.exists('models/distilbert_model') and os.path.exists('models/distilbert_tokenizer'):
+                    self.bert_model = DistilBertForSequenceClassification.from_pretrained('models/distilbert_model')
+                    self.bert_tokenizer = DistilBertTokenizerFast.from_pretrained('models/distilbert_tokenizer')
+                    self.bert_model.to(self.device)
+                    self.bert_model.eval()
+                    st.success("✅ Modèle DistilBERT chargé avec succès")
+                else:
+                    st.warning("⚠️ Modèles DistilBERT non trouvés")
+            except Exception as e:
+                st.warning(f"⚠️ Erreur lors du chargement de DistilBERT: {e}")
+        else:
+            st.warning("⚠️ PyTorch non disponible, modèle DistilBERT non chargé")
+        
+        self.models_loaded = True
+        return True
+    
+    def predict_simple(self, text):
+        """Predict using scikit-learn model"""
+        if not self.sklearn_model or not self.tfidf_vectorizer:
+            return 0, 0.5
+        
+        cleaned_text = clean_text(text)
+        text_tfidf = self.tfidf_vectorizer.transform([cleaned_text])
+        prediction = self.sklearn_model.predict(text_tfidf)[0]
+        probability = self.sklearn_model.predict_proba(text_tfidf)[0][1]  # Probability of spam
+        
         return prediction, probability
     
     def predict_bert(self, text):
-        """Prédiction avec le modèle BERT (simulation)"""
-        if not self.tokenizer_bert:
-            return self.predict_basic(text)
+        """Predict using DistilBERT model"""
+        if not self.bert_model or not self.bert_tokenizer:
+            return self.predict_simple(text)
         
-        # Simulation d'une prédiction BERT plus sophistiquée
-        spam_indicators = ['free', 'win', 'prize', 'call now', 'urgent', 'limited time', 
-                          'congratulations', 'winner', 'cash', 'money', 'claim', 'txt']
-        text_lower = text.lower()
+        # Tokenize and encode the text
+        encoding = self.bert_tokenizer(
+            text,
+            truncation=True,
+            padding='max_length',
+            max_length=128,
+            return_tensors='pt'
+        )
         
-        # Score basé sur les indicateurs de spam
-        indicator_score = sum(2 if indicator in text_lower else 0 for indicator in spam_indicators)
+        input_ids = encoding['input_ids'].to(self.device)
+        attention_mask = encoding['attention_mask'].to(self.device)
         
-        # Score basé sur la longueur et les caractères spéciaux
-        length_score = 1 if len(text) < 30 else 0
-        special_chars = len(re.findall(r'[!@#$%^&*(),.?":{}|<>]', text))
-        special_score = min(special_chars * 0.1, 1.0)
+        with torch.no_grad():
+            outputs = self.bert_model(input_ids=input_ids, attention_mask=attention_mask)
+            predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            probability = predictions[0][1].item()  # Probability of spam
+            prediction = 1 if probability > 0.5 else 0
         
-        # Score final
-        total_score = (indicator_score * 0.6 + length_score * 0.2 + special_score * 0.2)
-        probability = min(total_score * 0.1 + np.random.random() * 0.2, 1.0)
-        
-        # Ajustement pour rendre BERT plus précis
-        if probability > 0.3:
-            probability = min(probability * 1.2, 0.95)
-        
-        prediction = 1 if probability > 0.5 else 0
         return prediction, probability
 
 # Initialisation du détecteur
 @st.cache_resource
 def load_detector():
     detector = SpamDetector()
-    detector.load_bert_model()
+    detector.load_models()
     return detector
 
 def create_wordcloud(text_data, title):
@@ -199,16 +237,16 @@ def load_sample_data():
     return pd.DataFrame(sample_data)
 
 def main():
-    # Avertissement pour les dépendances manquantes
-    if not TORCH_AVAILABLE:
-        st.warning("⚠️ PyTorch et Transformers ne sont pas installés. Utilisation du modèle de base uniquement.")
-    
     # En-tête principal
     st.markdown('<h1 class="main-header">📱 AT&T Spam Detector</h1>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #666;">Détection automatique de SMS indésirables avec IA</p>', unsafe_allow_html=True)
     
     # Chargement du détecteur
     detector = load_detector()
+    
+    # Avertissement si les modèles ne sont pas chargés
+    if not detector.models_loaded:
+        st.info("ℹ️ Pour utiliser les modèles entraînés, exécutez d'abord le script train_models.py")
     
     # Sidebar pour la navigation
     st.sidebar.title("🔧 Navigation")
@@ -286,9 +324,19 @@ def show_detection_page(detector):
     st.markdown('<h2 class="sub-header">🔍 Détection de Spam</h2>', unsafe_allow_html=True)
     
     # Sélection du modèle
+    available_models = []
+    if detector.sklearn_model is not None:
+        available_models.append("🧠 Modèle scikit-learn (TF-IDF + Logistic Regression)")
+    if detector.bert_model is not None:
+        available_models.append("🤖 Modèle DistilBERT (Avancé)")
+    
+    if not available_models:
+        st.error("❌ Aucun modèle disponible. Veuillez d'abord exécuter train_models.py")
+        return
+    
     model_choice = st.selectbox(
         "Choisissez le modèle à utiliser :",
-        ["🤖 Modèle BERT (Avancé)", "🧠 Modèle de base (Neural Network)"]
+        available_models
     )
     
     # Zone de saisie du texte
@@ -319,10 +367,10 @@ def show_detection_page(detector):
         st.markdown("### 🎯 Résultat de l'analyse")
         
         with st.spinner("Analyse en cours..."):
-            if "BERT" in model_choice:
+            if "DistilBERT" in model_choice:
                 prediction, probability = detector.predict_bert(user_input)
             else:
-                prediction, probability = detector.predict_basic(user_input)
+                prediction, probability = detector.predict_sklearn(user_input)
         
         # Affichage du résultat
         if prediction == 1:  # Spam
