@@ -54,9 +54,7 @@ Thumbs.db
 # Model files (if large)
 *.h5
 *.pkl
-*.joblib
 *.model
-models/
 
 # Data files (optional - uncomment if you don't want to include data)
 # *.csv

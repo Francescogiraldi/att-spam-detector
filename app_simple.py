@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re
 import joblib
 import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+import re
+import string
+from setup_models import setup_models
 import plotly.express as px
 import plotly.graph_objects as go
 from wordcloud import WordCloud
@@ -83,15 +85,28 @@ class SimpleSpamDetector:
     def load_model(self):
         """Load the trained scikit-learn model"""
         try:
-            if os.path.exists('models/sklearn_model.joblib') and os.path.exists('models/tfidf_vectorizer.joblib'):
-                self.model = joblib.load('models/sklearn_model.joblib')
-                self.vectorizer = joblib.load('models/tfidf_vectorizer.joblib')
-                self.model_loaded = True
-                return True
-            else:
-                return False
+             model_path = 'models/sklearn_model.joblib'
+             vectorizer_path = 'models/tfidf_vectorizer.joblib'
+             
+             if os.path.exists(model_path) and os.path.exists(vectorizer_path):
+                  self.model = joblib.load(model_path)
+                  self.vectorizer = joblib.load(vectorizer_path)
+                  self.model_loaded = True
+                  return True
+              else:
+                  with st.spinner("Entraînement des modèles en cours, veuillez patienter..."):
+                      if setup_models():
+                          if os.path.exists(model_path) and os.path.exists(vectorizer_path):
+                              self.model = joblib.load(model_path)
+                              self.vectorizer = joblib.load(vectorizer_path)
+                              self.model_loaded = True
+                              st.success("Modèles entraînés et chargés avec succès!")
+                              return True
+                      else:
+                          st.error("Échec de l'entraînement des modèles. Veuillez vérifier les logs.")
+                  return False
         except Exception as e:
-            st.error(f"Erreur lors du chargement du modèle: {e}")
+            st.error(f"Erreur lors du chargement du modèle: {str(e)}")
             return False
     
     def predict(self, text):
