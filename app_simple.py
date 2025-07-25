@@ -93,7 +93,7 @@ class SimpleSpamDetector:
                   self.vectorizer = joblib.load(vectorizer_path)
                   self.model_loaded = True
                   return True
-              else:
+             else:
                   with st.spinner("Entraînement des modèles en cours, veuillez patienter..."):
                       if setup_models():
                           if os.path.exists(model_path) and os.path.exists(vectorizer_path):
