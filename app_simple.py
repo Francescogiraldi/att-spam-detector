@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import pickle
+import joblib
 import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -83,11 +83,9 @@ class SimpleSpamDetector:
     def load_model(self):
         """Load the trained scikit-learn model"""
         try:
-            if os.path.exists('models/sklearn_model.pkl') and os.path.exists('models/tfidf_vectorizer.pkl'):
-                with open('models/sklearn_model.pkl', 'rb') as f:
-                    self.model = pickle.load(f)
-                with open('models/tfidf_vectorizer.pkl', 'rb') as f:
-                    self.vectorizer = pickle.load(f)
+            if os.path.exists('models/sklearn_model.joblib') and os.path.exists('models/tfidf_vectorizer.joblib'):
+                self.model = joblib.load('models/sklearn_model.joblib')
+                self.vectorizer = joblib.load('models/tfidf_vectorizer.joblib')
                 self.model_loaded = True
                 return True
             else:

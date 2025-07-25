@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
-import pickle
+import joblib
 import os
 import re
 import string
@@ -78,17 +78,14 @@ def main():
     # Train scikit-learn model
     sklearn_model, tfidf_vectorizer = train_sklearn_model(X_train, X_test, y_train, y_test)
     
-    # Save scikit-learn model
-    with open('models/sklearn_model.pkl', 'wb') as f:
-        pickle.dump(sklearn_model, f)
-    
-    with open('models/tfidf_vectorizer.pkl', 'wb') as f:
-        pickle.dump(tfidf_vectorizer, f)
+    # Save scikit-learn model using joblib
+    joblib.dump(sklearn_model, 'models/sklearn_model.joblib')
+    joblib.dump(tfidf_vectorizer, 'models/tfidf_vectorizer.joblib')
     
     print("\nScikit-learn model saved successfully!")
     print("Models saved in 'models/' directory:")
-    print("- sklearn_model.pkl")
-    print("- tfidf_vectorizer.pkl")
+    print("- sklearn_model.joblib")
+    print("- tfidf_vectorizer.joblib")
 
 if __name__ == "__main__":
     main()
